@@ -1,154 +1,152 @@
-# Story Generation with an LSTM
+# Story Generator with an LSTM
 
-Give the model a few words, and it keeps writing.
+Give the model a few words to start with, and it keeps writing the rest.
 
 ```
-Seed:   "first citizen we are"
-Output: "first citizen we are a king and what i know not not not done you
-         that we will not the crown and a king i fear you have all the
-         house of a world that i am not the point of a king charity"
+Seed:   "In the hustle and bustle of ipoti"
+Output: "in the hustle and bustle of ipoti the taj mahal taught anaya the
+         importance of love devotion and the power of architectural beauty
+         of the human spirit they stood on the centuries the friends
+         discovered ancient inscriptions and hidden chambers..."
 ```
 
-The model reads Shakespeare, learns which word tends to follow which, and then
-writes new lines one word at a time.
+That is the whole idea. The model reads a lot of text, learns which word usually
+comes after which, and then writes new text one word at a time.
 
 ---
 
-## The dataset
+## The flow, in plain words
 
-**Tiny Shakespeare** — 1.1 MB of Shakespeare's plays, public domain.
+The whole project is one notebook with five steps. Nothing more.
 
-```
-https://raw.githubusercontent.com/karpathy/char-rnn/master/data/tinyshakespeare/input.txt
-```
+**1. Read the text.**
+We open `stories.txt` and lowercase everything. Lowercasing means "The" and
+"the" count as the same word, so the model has fewer things to learn.
 
-The notebook downloads it automatically, so there is nothing to set up.
+**2. Give every word a number.**
+A model cannot read letters, only numbers. So `the` becomes 1, `and` becomes 2,
+and so on. This is called tokenizing.
 
-| | |
+**3. Turn each line into practice questions.**
+From the line *"once upon a time"* we make:
+
+| Question (what the model sees) | Answer (what it should say) |
 |---|---|
-| Lines | 32,777 |
-| Words | 202,619 |
-| Different words | 12,848 |
+| once | upon |
+| once upon | a |
+| once upon a | time |
+
+Every line in the file gives us a handful of these. That is how a plain text
+file becomes training data — no labelling by hand, no extra work.
+
+**4. Make all questions the same length.**
+Some questions are 3 words, some are 40. The model needs one fixed size, so we
+pad the short ones with zeros at the front.
+
+**5. Train, then write.**
+The model learns from all those questions. After that, we hand it a starting
+phrase, it predicts the next word, we stick that word on the end, and we ask
+again. Repeat 50 times and you have a paragraph.
+
+---
+
+## Why we chose this flow
+
+### Because it is small enough to understand completely
+
+There are about 12 short cells in the notebook. Every single one can be read,
+explained and checked in a minute. A pipeline we fully trust is worth more than
+a clever one we cannot verify.
+
+### Because we were short on time
+
+This is the honest reason behind most of the decisions here. We had a hard
+deadline, so the rule we followed was:
+
+> Pick the version that trains fast enough to run again if something breaks.
+
+A setup that takes two hours gives you one attempt. A setup that takes a few
+minutes gives you ten. When time is tight, the number of attempts matters more
+than the sophistication of any single one.
+
+### Because it actually worked
+
+We ran this exact flow on a small collection of short stories and the model
+reached about **96% accuracy** on the training text, with output that reads
+like real sentences (the sample at the top of this page). It finished in roughly
+20 seconds per pass on a free Colab GPU.
+
+That was the moment we stopped looking for a better approach. The simple thing
+was already producing the result we needed.
+
+---
+
+## Why each piece is there
+
+| Piece | Why we used it |
+|---|---|
+| **Keras / TensorFlow** | Free, runs on Google Colab's free GPU, and the whole model is 5 lines. No setup on our own machines. |
+| **Google Colab** | Free GPU. Training on a laptop CPU would have taken hours instead of minutes. |
+| **Embedding layer** | Lets the model learn that "king" and "queen" are related. Without it, every word is just an unrelated number. |
+| **Bidirectional LSTM** | LSTM remembers earlier words in the sentence, so it does not forget the subject halfway through. "Bidirectional" means it reads the context both ways, which improved the sentences noticeably for almost no extra cost. |
+| **Dense + softmax** | Gives every word in the vocabulary a score, and we take the highest one. |
+| **Adam optimiser** | The safe default. It works well without us having to tune the learning rate — one less thing to spend time on. |
+| **Plain text file as input** | No database, no cleaning scripts, no API. Drop in a `.txt` and the notebook handles the rest. |
 
 ---
 
 ## How to run it
 
-1. Open `LSTM_Story_Generator_Simple.ipynb` in Google Colab
-2. **Runtime → Change runtime type → T4 GPU**
-3. **Runtime → Run all**
+1. Open `Using LSTM as story generator.ipynb` in Google Colab
+2. Upload `stories.txt` (the notebook reads it from `/content/stories.txt`)
+3. **Runtime → Change runtime type → T4 GPU**
+4. **Runtime → Run all**
 
-It finishes in about two minutes.
+Then edit the last cell to change the starting phrase:
 
----
-
-## Results
-
-| | Loss | Accuracy |
-|---|---|---|
-| Training | 6.3464 | 0.0835 |
-| Validation | 6.3917 | 0.0840 |
-| **Test** | 6.6809 | **0.0774** |
-
-**What these numbers mean.** The model picks the correct next word about **8%**
-of the time. That sounds low until you consider it is choosing from **12,848
-possible words** — random guessing would be right 0.008% of the time, so the
-model is roughly **995× better than chance**.
-
-The more useful number is the small gap between training (0.0835) and test
-(0.0774). The model does nearly as well on text it has never seen as on text it
-trained on, which means it learned real patterns instead of memorising the
-script.
-
----
-
-## Why we built it this way
-
-### Why a simple flow
-
-We started from a straightforward, well-understood approach: take a few words,
-predict the next one, repeat. No clever tricks. A simple pipeline that we could
-fully understand and verify was worth more than a complicated one we could not
-check in the time available.
-
-### Why we had to change one thing
-
-The usual version of this code turns each answer into a long list of zeros with
-a single one in it — one slot for every word in the vocabulary. With 169,842
-training examples and 12,848 words, that list would have needed **8.7 GB of
-memory** and crashed the session before training started.
-
-The fix was to keep each answer as a plain number (word #4,318 instead of a list
-of 12,848 zeros) and let the training function look it up. Same result, a few
-megabytes instead of 8.7 GB, and slightly less code.
-
-**This is the one change that made the approach work on a full-sized dataset.**
-
-### Why the model picks words randomly instead of always the best one
-
-Always choosing the single most likely word sounds correct, but it gets stuck:
-
-> and the king and the king and the king and the king...
-
-Because the choice is always the same, the model loops forever. Instead it picks
-from the likely options with some randomness. A `temperature` setting controls
-how adventurous it is — low is safe and repetitive, high is varied and messier.
-Both are shown in the notebook.
-
-### Why only 5 epochs
-
-An epoch is one pass through all the training text. We stopped at 5 for two
-reasons:
-
-1. **It stopped helping.** Validation results were best at epoch 4 and got
-   slightly worse afterwards. Training longer would have produced a *worse*
-   model, not a better one. The notebook automatically keeps the best version.
-2. **Time.** The whole task had a hard deadline, so a two-minute training run
-   that we could repeat and verify beat a long run we would only get one shot
-   at.
-
-### Why we measure three scores instead of one
-
-The text is split three ways:
-
-- **Training** (about 80%) — what the model learns from
-- **Validation** (10%) — checked after each pass to catch it going wrong
-- **Test** (10%) — held back completely, never used during training
-
-The test portion matters because the validation portion helps *decide* which
-version of the model to keep, so it is no longer a neutral judge. The test set
-had no say in anything, so it is the honest score.
-
----
-
-## The model
-
-```
-Embedding          turns each word into a list of 100 numbers
-Bidirectional LSTM reads the sentence forwards and backwards (150 units)
-Dense (softmax)    gives every one of the 12,848 words a probability
+```python
+input_text = "In the hustle and bustle of"
+print(generate_story(input_text, 50, model, max_length))
 ```
 
-About 5.4 million adjustable values, trained with the Adam optimiser.
+---
+
+## A note about the numbers
+
+The results saved inside the notebook come from a run on a **small collection of
+short stories** (about 2,600 different words). That is where the 96% accuracy
+and the sample output above came from.
+
+The `stories.txt` in this folder is a **much larger text** — 40,000 lines and
+about 12,600 different words. If you run the notebook on this file, expect:
+
+- Longer training time (many more practice questions to work through)
+- A lower accuracy number, because the model is now choosing between 12,600
+  words instead of 2,600
+
+Lower accuracy on the bigger file is not a bug. It is a harder test. Both runs
+use exactly the same code.
 
 ---
 
-## Honest limitations
+## What this model does not do
 
-- **It repeats itself.** Common words like "king" and "the" show up often. With
-  202,619 words and a 12,848-word vocabulary, the average word appears only
-  about 16 times — not many examples to learn from.
-- **It does not tell a story.** It predicts one word at a time and has no sense
-  of plot, characters, or an ending. It captures the *style* of Shakespeare, not
-  the structure of a story.
-- **No punctuation.** The task asked for punctuation to be removed, so the
-  output has none.
-- **Rare words never get learned.** A word appearing once or twice does not give
-  the model enough to work with.
+Being honest about the limits is part of the point of keeping it simple:
 
-**The biggest improvement would be more text, not a bigger model.** The full
-works of Shakespeare are about five times this size, and that would help more
-than any change to the architecture.
+- **It has no plot.** It predicts one word at a time. It does not know how a
+  story starts or ends — it only knows what tends to follow what.
+- **It repeats itself.** We always take the single most likely next word, so
+  the model can fall into loops like *"and the king and the king..."*. Picking
+  randomly among the top few words would fix this, and is the first thing we
+  would add with more time.
+- **It only knows words it has seen.** A word that appeared twice in the file
+  will never be used well.
+- **It learns the file closely.** With 100 training passes on a small file, a
+  lot of what it produces is close to the original text. More text would help
+  here far more than a bigger model would.
+
+**If we had more time, in order:** more text, then random word picking instead
+of always-the-best, then a proper train/test split to measure it honestly.
 
 ---
 
@@ -156,9 +154,7 @@ than any change to the architecture.
 
 | File | What it is |
 |---|---|
-| `LSTM_Story_Generator_Simple.ipynb` | The whole project — run this |
-| `input.txt` | The Shakespeare text |
-| `.gitignore` | Keeps the 62 MB trained model out of the repo |
-
-The trained model file (`word_lstm.keras`) is not included because it is 62 MB
-and the notebook recreates it in about two minutes.
+| `Using LSTM as story generator.ipynb` | The whole project — run this |
+| `stories.txt` | The text the model learns from |
+| `word_lstm.keras` | The trained model (not in git — 62 MB, the notebook rebuilds it) |
+| `.gitignore` | Keeps the big model file out of the repo |
