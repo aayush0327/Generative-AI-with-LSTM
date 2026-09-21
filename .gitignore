@@ -1,0 +1,10 @@
+# Trained model — 62 MB, and the notebook regenerates it in ~2 minutes
+word_lstm.keras
+*.keras
+*.h5
+
+# Notebook leftovers
+.ipynb_checkpoints/
+__pycache__/
+*.pyc
+
